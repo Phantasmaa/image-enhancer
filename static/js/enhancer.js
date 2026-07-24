@@ -289,9 +289,17 @@
   // ─── Browser-side fallback ───────────────────────────────────────────
   // Uses onnxruntime-web + a SwinIR-style super-resolution model.
   // Loads from huggingface.co at first use.
+  //
+  // Model: rocca/swin-ir-onnx → 003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.onnx
+  //   4× super-resolution model trained with BSRGAN degradation on real photos.
+  //   Input: float32 [1, 3, H, W] in range [0, 1] · output: same shape ×4.
+  const SWINIR_MODEL_URL =
+    'https://huggingface.co/rocca/swin-ir-onnx/resolve/main/' +
+    '003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.onnx';
+
   async function enhanceBrowser() {
     setStatus('Cargando motor de IA en el browser...', 'warn');
-    setProgress(5, 100, 'Cargando onnxruntime-web...', 5);
+    setProgress(2, 100, 'Cargando onnxruntime-web...', 2);
 
     try {
       // Load onnxruntime-web from CDN
@@ -300,19 +308,30 @@
       }
       if (!window.ort) throw new Error('No se pudo cargar onnxruntime-web');
 
-      setProgress(20, 100, 'Cargando modelo SwinIR (~12MB, primera vez tarda)...', 20);
-
-      // Configure WASM paths
-      window.ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/';
+      // Configure WASM paths (required for multi-thread / SIMD fallback)
+      window.ort.env.wasm.wasmPaths =
+        'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/';
 
       if (!state.browserSession) {
-        const modelUrl = 'https://huggingface.co/rocca/swin-ir-onnx/resolve/main/swin_ir_onnx.onnx';
-        state.browserSession = await window.ort.InferenceSession.create(modelUrl, {
-          executionProviders: ['wasm'],
-        });
+        setProgress(5, 100, 'Descargando modelo SwinIR (~58 MB, primera vez tarda)...', 5);
+        state.browserSession = await window.ort.InferenceSession.create(
+          SWINIR_MODEL_URL,
+          {
+            executionProviders: ['wasm'],
+            progressCallback: (p) => {
+              if (typeof p.loadedBytes === 'number' && typeof p.totalBytes === 'number') {
+                const pct = 5 + (p.loadedBytes / p.totalBytes) * 35;
+                const mb = (p.loadedBytes / 1024 / 1024).toFixed(1);
+                const total = (p.totalBytes / 1024 / 1024).toFixed(1);
+                setProgress(pct, 100,
+                  `Descargando modelo: ${mb}/${total} MB (${pct.toFixed(0)}%)`, pct);
+              }
+            },
+          }
+        );
       }
 
-      setProgress(40, 100, 'Procesando imagen en el browser...', 40);
+      setProgress(42, 100, 'Modelo cargado · procesando imagen...', 42);
 
       // Load image to canvas
       const img = document.getElementById('originalImg');
@@ -336,6 +355,7 @@
       ctx.drawImage(img, 0, 0, procW, procH);
 
       const imgData = ctx.getImageData(0, 0, procW, procH);
+      // CHW float32 [0,1] in NCHW [1, 3, H, W]
       const arr = new Float32Array(procW * procH * 3);
       for (let i = 0, j = 0; i < imgData.data.length; i += 4, j += 3) {
         arr[j    ] = imgData.data[i    ] / 255.0;
@@ -344,24 +364,33 @@
       }
       const tensor = new window.ort.Tensor('float32', arr, [1, 3, procH, procW]);
 
-      setProgress(50, 100, 'Inferencia en CPU...', 50);
+      setStatus(
+        `Inferencia SwinIR ${procW}×${procH} → ${procW*4}×${procH*4} (puede tardar 1-3 min en CPU del browser)`,
+        'warn'
+      );
+      setProgress(50, 100, 'Inferencia en CPU del browser...', 50);
+      const t0 = performance.now();
       const out = await state.browserSession.run({ input: tensor });
+      const elapsedSec = ((performance.now() - t0) / 1000).toFixed(1);
+      console.log(`SwinIR inference: ${elapsedSec}s`);
       const outArr = out.output.data;
-      const outH = out.output.dims[2];
-      const outW = out.output.dims[3];
+      const outDims = out.output.dims;
+      const outH = outDims[outDims.length - 2];
+      const outW = outDims[outDims.length - 1];
 
       setProgress(85, 100, 'Decodificando resultado...', 85);
 
-      // Convert CHW float → HWC uint8
+      // CHW float → HWC uint8 with clamp (SwinIR outputs can drift outside [0,1])
       const outCanvas = document.createElement('canvas');
       outCanvas.width = outW;
       outCanvas.height = outH;
       const outCtx = outCanvas.getContext('2d');
       const outImgData = outCtx.createImageData(outW, outH);
       for (let i = 0, j = 0; j < outArr.length; i += 4, j += 3) {
-        outImgData.data[i    ] = Math.max(0, Math.min(255, outArr[j    ] * 255));
-        outImgData.data[i + 1] = Math.max(0, Math.min(255, outArr[j + 1] * 255));
-        outImgData.data[i + 2] = Math.max(0, Math.min(255, outArr[j + 2] * 255));
+        // The model can output values slightly outside [0,1]; clamp aggressively.
+        outImgData.data[i    ] = Math.max(0, Math.min(255, Math.round(outArr[j    ] * 255)));
+        outImgData.data[i + 1] = Math.max(0, Math.min(255, Math.round(outArr[j + 1] * 255)));
+        outImgData.data[i + 2] = Math.max(0, Math.min(255, Math.round(outArr[j + 2] * 255)));
         outImgData.data[i + 3] = 255;
       }
       outCtx.putImageData(outImgData, 0, 0);
@@ -373,14 +402,21 @@
       state.serverResultURL = dataURL;
       state.serverJobID = 'browser';
       document.getElementById('downloadBtn').disabled = false;
-      setStatus(`Listo (browser) · ${procW}×${procH} → ${outW}×${outH}`, 'ok');
+      setStatus(
+        `Listo (browser) · ${procW}×${procH} → ${outW}×${outH} en ${elapsedSec}s`,
+        'ok'
+      );
       setProgress(100, 100, 'Completado', 100);
     } catch (e) {
-      cleanup('Error en browser: ' + e.message, 'err');
+      console.error('Browser enhance error:', e);
+      cleanup('Error en browser: ' + (e.message || e), 'err');
       return;
     }
     state.busy = false;
     setBusyButtons(false);
+    // setBusyButtons(false) disables the download button; re-enable now that
+    // the operation truly completed (this is the last statement in the function).
+    document.getElementById('downloadBtn').disabled = false;
   }
 
   function loadScript(src) {
