@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#0a0a14">
+<title>Image Enhancer — Mejora con IA</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<div id="topbar">
+  <div class="brand">✨ Image Enhancer</div>
+  <div class="topbar-actions">
+    <a href="/" class="link-home">← Links</a>
+  </div>
+</div>
+
+<div id="app">
+
+  <aside id="sidebar">
+    <section class="card">
+      <h3>📁 Imagen</h3>
+      <div id="imgInfo" class="img-info muted">Sin imagen</div>
+      <button class="btn btn-ghost btn-block" id="clearBtn" style="margin-top:8px" disabled>✕ Quitar imagen</button>
+    </section>
+
+    <section class="card">
+      <h3>⚙️ Configuración</h3>
+      <label class="field">
+        <span>Modelo</span>
+        <select id="modelSelect">
+          <option value="realesrgan-x4">Real-ESRGAN x4 (fotos, 64MB)</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Modo de procesamiento</span>
+        <select id="modeSelect">
+          <option value="server">Servidor (usa CPU del VPS)</option>
+          <option value="browser">Browser (usa tu CPU, sin tocar VPS)</option>
+          <option value="auto">Auto: server si &lt;800px, browser si más grande</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="card">
+      <h3>📊 Estado del servidor</h3>
+      <div id="serverStatus" class="muted small">Verificando...</div>
+    </section>
+
+    <section class="card">
+      <h3>ℹ️ Acerca</h3>
+      <div class="muted small">
+        Basado en <strong>Real-ESRGAN</strong> (xinntao) corriendo sobre
+        <strong>ONNX Runtime</strong> en CPU. Para fotos muy grandes
+        se ofrece fallback en el browser usando SwinIR.
+      </div>
+    </section>
+  </aside>
+
+  <main id="canvas-area">
+
+    <div id="dropZone">
+      <div class="drop-inner">
+        <div class="drop-icon">🖼️</div>
+        <h2>Arrastrá tu imagen acá</h2>
+        <p class="muted">o hacé click para elegir un archivo · máximo 30 MB</p>
+        <input type="file" id="fileInputDrop" accept="image/*" hidden>
+      </div>
+    </div>
+
+    <div id="workArea" style="display:none">
+      <div class="preview-row">
+        <div class="preview-box">
+          <div class="preview-label">Original</div>
+          <img id="originalImg" alt="original">
+        </div>
+        <div class="preview-arrow">→</div>
+        <div class="preview-box">
+          <div class="preview-label">Mejorada (IA)</div>
+          <div id="enhancedBox" class="enhanced-box">
+            <div class="placeholder" id="enhancedPlaceholder">
+              <span class="muted">Sin resultado aún</span>
+            </div>
+            <img id="enhancedImg" alt="enhanced" style="display:none">
+          </div>
+        </div>
+      </div>
+
+      <div class="action-bar">
+        <button class="btn btn-primary" id="enhanceBtn">✨ Mejorar imagen</button>
+        <button class="btn btn-ghost" id="downloadBtn" disabled>⬇ Descargar PNG</button>
+        <button class="btn btn-ghost" id="cancelBtn" disabled>✕ Cancelar</button>
+      </div>
+
+      <div class="progress-area" id="progressArea" style="display:none">
+        <div class="progress-info">
+          <span id="progressMessage">Iniciando...</span>
+          <span id="progressPercent" class="mono">0%</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+      </div>
+
+      <div id="status" class="status small muted"></div>
+    </div>
+
+  </main>
+
+</div>
+
+<script src="/static/js/enhancer.js"></script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+*.egg-info/
+
+# Secrets — never commit credentials
+.env
+*.env
+
+# Models — too big, must be downloaded separately
+models/*.onnx
+
+# Generated cache (filled at runtime)
+cache/*.png
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artifacts
+*.apk
+*.ipa
+dist/
+build/
+node_modules/
+
+# Backups
+*.bak
+*.backup
+*.tmp
+
+# Logs
+*.log
+logs/
