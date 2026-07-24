@@ -44,8 +44,10 @@ pip install pillow onnxruntime numpy flask
 ```bash
 mkdir -p models
 curl -L -o models/RealESRGAN_x4.onnx \
-  https://huggingface.co/Meeperomi/RealESRGAN_x4-onnx/resolve/main/RealESRGAN_x4.onnx
+  https://huggingface.co/bukuroo/Real-ESRGAN-x4-ONNX/resolve/main/RealESRGAN_x4.onnx
 ```
+
+   The repo `[bukuroo/Real-ESRGAN-x4-ONNX](https://huggingface.co/bukuroo/Real-ESRGAN-x4-ONNX)` mirrors the original `Meeperomi/RealESRGAN_x4-onnx` model. Both work — bukuroo's is more reliably hosted.
 
 3. Run:
 
@@ -121,11 +123,28 @@ Status of loaded models and cache size.
 For very large images, switch to "Browser" mode in the UI. The page will:
 
 1. Load `onnxruntime-web` from jsdelivr (CDN, ~1MB wasm)
-2. Download the SwinIR ONNX model from Hugging Face (~12MB, cached after)
-3. Run inference entirely on the user's CPU
-4. Display the result without any server roundtrip
+2. Download the SwinIR ONNX model from Hugging Face (**58 MB**, first time only — cached by the browser)
+3. Show a live progress bar during download (MB/% counter)
+4. Run inference entirely on the user's CPU
+5. Display the result without any server roundtrip
 
 This keeps the VPS CPU/RAM free for other users, at the cost of a longer first load.
+
+Performance (browser-side, varies by user CPU):
+
+| Input size | Browser time (typical) |
+|---|---|
+| 64×64   | ~10 sec  |
+| 96×96   | ~22 sec  |
+| 256×256 | ~3-5 min |
+
+Browser-side inference is ~5-10× slower than server-side per pixel, but it scales linearly with the image area. For images >800px wide, the freedom from server queue makes it worth it.
+
+## Recent fixes
+
+- **Fixed SwinIR URL** — was pointing to a non-existent file (`swin_ir_onnx.onnx`, 404). Now correctly downloads `003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.onnx` (58 MB). With live download progress.
+- **Output clamping** — SwinIR can produce values slightly outside [0,1]; now clamp + round aggressively to prevent invalid pixels.
+- **Download button reorder** — `setBusyButtons(false)` was disabling the download button after it was re-enabled; now download stays enabled after success.
 
 ## License
 
